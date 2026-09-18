@@ -24,6 +24,7 @@ namespace LastWars.Client
                 if (prefab == null) { Debug.LogWarning("Prefab de coleta ausente: " + PrefabPath(kind)); continue; }
                 // Cone emits along local Z: point the cone upward in world space.
                 var burst = UnityEngine.Object.Instantiate(prefab, position, Quaternion.Euler(-90, 0, 0), owner);
+                ResourceParticleOverlay.Attach(burst, Camera.main, owner);
                 burst.Play(true);
             }
         }

@@ -18,7 +18,12 @@ namespace LastWars.Client
         TMP_Text placementStatus;
         Button placementConfirm;
         TMP_Text status, commander;
-        readonly TMP_Text[] resourceAmounts = new TMP_Text[4];
+        readonly TMP_Text[] resourceAmounts = new TMP_Text[5];
+        readonly RectTransform[] resourceFills = new RectTransform[5];
+        readonly AnimatedResourceValue[] counters = new AnimatedResourceValue[5];
+        int availableBuilders, totalBuilders;
+        ResourcesDto hudResources;
+        long resourceCapacity;
         CanvasGroup dialogGroup, hudGroup;
         Rect lastSafe;
         Vector2 lastScreen;
@@ -37,25 +42,54 @@ namespace LastWars.Client
             hud = new GameObject("HUD", typeof(RectTransform)); hud.transform.SetParent(safe, false); Stretch((RectTransform)hud.transform);
             hudGroup = hud.AddComponent<CanvasGroup>();
             var top = Panel("Command strip", hud.transform, Navy); Top(top, 108);
-            commander = Text(top, "IRON FRONTIER  /  COMANDO", 20, 30); Position(commander.rectTransform, new Vector2(16, -8), new Vector2(-16, -42), true);
-            var resourceRow = Rect("Resources", top);
-            Position(resourceRow, new Vector2(12, -100), new Vector2(-12, -44), true);
-            var resourceLayout = resourceRow.gameObject.AddComponent<HorizontalLayoutGroup>();
-            resourceLayout.spacing = 8; resourceLayout.childForceExpandWidth = true; resourceLayout.childForceExpandHeight = true;
-            for (int i = 0; i < resourceAmounts.Length; i++)
+            commander = Text(top, "IRON FRONTIER", 22, 48);
+            commander.rectTransform.anchorMin = new Vector2(.16f, 1);
+            commander.rectTransform.anchorMax = new Vector2(.84f, 1);
+            commander.rectTransform.offsetMin = new Vector2(12, -48);
+            commander.rectTransform.offsetMax = new Vector2(-12, -8);
+            commander.alignment = TextAlignmentOptions.Center;
+            commander.enableWordWrapping = false;
+            commander.enableAutoSizing = true; commander.fontSizeMin = 12; commander.fontSizeMax = 22;
+            var primaryRow = Rect("Builders", top);
+            primaryRow.anchorMin = primaryRow.anchorMax = Vector2.one;
+            primaryRow.offsetMin = new Vector2(-144, -48); primaryRow.offsetMax = new Vector2(-12, -8);
+            var secondaryRow = Rect("Resources", top);
+            secondaryRow.anchorMin = new Vector2(0, 1); secondaryRow.anchorMax = Vector2.one;
+            secondaryRow.offsetMin = new Vector2(12, -100); secondaryRow.offsetMax = new Vector2(-12, -56);
+            foreach (var resourceRow in new[] { primaryRow, secondaryRow })
             {
-                var kind = (ResourceKind)i;
-                var card = Panel(ProductionRules.Name(kind), resourceRow, Slate);
-                card.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
-                var icon = ResourceIcon.Create(card, kind, new Vector2(42, 42));
+                var resourceLayout = resourceRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+                resourceLayout.spacing = 8;
+                resourceLayout.childForceExpandWidth = false; resourceLayout.childForceExpandHeight = true;
+            }
+            // Display priority is independent from resource IDs and animated counter indices.
+            foreach (int i in new[] { 2, 0, 4, 1, 3 })
+            {
+                bool builder = i == 4;
+                bool secondary = !builder;
+                var kind = builder ? ResourceKind.Food : (ResourceKind)i;
+                var card = Panel(builder ? "Construtores" : ProductionRules.Name(kind), secondary ? secondaryRow : primaryRow, Slate);
+                var cardLayout = card.gameObject.AddComponent<LayoutElement>();
+                cardLayout.minWidth = 0; cardLayout.preferredWidth = 0;
+                cardLayout.flexibleWidth = 1;
+                var fill = Panel("Capacity fill", card, Cyan);
+                Stretch(fill); fill.anchorMax = new Vector2(0, 1);
+                fill.GetComponent<Image>().raycastTarget = false;
+                resourceFills[i] = fill;
+                float iconSize = builder ? 30 : 34;
+                var icon = ResourceIcon.Create(card, kind, new Vector2(iconSize, iconSize));
+                icon.Builder = builder; icon.SetVerticesDirty();
                 icon.rectTransform.anchorMin = icon.rectTransform.anchorMax = new Vector2(0, .5f);
-                icon.rectTransform.anchoredPosition = new Vector2(27, 0);
+                icon.rectTransform.anchoredPosition = new Vector2(builder ? 21 : 24, 0);
                 var amount = Text(card, "0", 20, 26);
-                Position(amount.rectTransform, new Vector2(53, -51), new Vector2(-5, -22), true);
+                Stretch(amount.rectTransform);
+                amount.rectTransform.offsetMin = new Vector2(builder ? 34 : 40, 3);
+                amount.rectTransform.offsetMax = new Vector2(builder ? -34 : -40, -3);
                 amount.enableAutoSizing = true; amount.fontSizeMin = 10; amount.fontSizeMax = 20;
+                amount.alignment = TextAlignmentOptions.Center;
                 amount.enableWordWrapping = false; resourceAmounts[i] = amount;
-                var name = Text(card, ProductionRules.Name(kind), 12, 20);
-                Position(name.rectTransform, new Vector2(53, -23), new Vector2(-5, -3), true);
+                counters[i] = card.gameObject.AddComponent<AnimatedResourceValue>();
+                counters[i].Initialize(amount, fill, Cyan, Green);
             }
             var bottom = Panel("Navigation", hud.transform, Navy); Bottom(bottom, 108);
             var row = Rect("Actions", bottom); row.anchorMin = new Vector2(0, 1); row.anchorMax = Vector2.one;
@@ -117,9 +151,25 @@ namespace LastWars.Client
         public void Hud(BaseDto data, string name)
         {
             hud.SetActive(true);
-            commander.text = $"{name}   •   Construtores {data.available_builders}/{data.total_builders}";
+            commander.text = name;
+            availableBuilders = data.available_builders; totalBuilders = data.total_builders;
+            hudResources = data.resources;
+            UpdateResourceBars();
+        }
+        // Capacity comes from the existing production endpoint, not the base contract.
+        public void StorageCapacity(long capacity)
+        {
+            resourceCapacity = System.Math.Max(0, capacity);
+            UpdateResourceBars();
+        }
+        void UpdateResourceBars()
+        {
             for (int i = 0; i < resourceAmounts.Length; i++)
-                resourceAmounts[i].text = ProductionRules.Amount(data.resources, (ResourceKind)i).ToString("N0");
+            {
+                if (counters[i] == null) continue;
+                long amount = i == 4 ? availableBuilders : ProductionRules.Amount(hudResources, (ResourceKind)i);
+                counters[i].SetValue(amount, i == 4 ? totalBuilders : resourceCapacity);
+            }
         }
         public void Close() { if (shade != null) Destroy(shade); shade = null; dialog = null; dialogGroup = null; }
         public RectTransform Dialog(string title, bool close = true)

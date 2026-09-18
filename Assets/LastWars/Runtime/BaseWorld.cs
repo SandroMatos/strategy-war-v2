@@ -62,7 +62,9 @@ namespace LastWars.Client
             var blue = Material(new Color(.17f, .40f, .57f));
             var pale = Material(new Color(.70f, .76f, .75f));
             var gold = Material(new Color(.88f, .66f, .19f));
-            var green = Material(new Color(.38f, .52f, .26f));
+            var green = Material(new Color(.32f, .65f, .24f));
+            var iron = Material(new Color(.47f, .68f, .80f));
+            var oil = Material(new Color(.19f, .12f, .25f));
             var bounds = data.grid_bounds;
             float w = bounds.max_x - bounds.min_x, h = bounds.max_y - bounds.min_y;
             var center = new Vector3((bounds.min_x + bounds.max_x) * .5f, 0, (bounds.min_y + bounds.max_y) * .5f);
@@ -80,13 +82,13 @@ namespace LastWars.Client
                 root.AddComponent<BuildingMarker>().Id = b.id;
                 buildings.Add(b.id, root);
                 float bw = Mathf.Max(.4f, b.width - .22f), bh = Mathf.Max(.4f, b.height - .22f);
-                var accent = b.type.Contains("farm") ? green : b.type.Contains("gold") ? gold : blue;
+                var accent = b.type == "food_farm" ? green : b.type == "iron_mine" ? iron : b.type == "oil_pump" ? oil : b.type.Contains("gold") ? gold : blue;
                 if (b.status == "destroyed" || b.status == "pending") accent = wall;
                 Shape(PrimitiveType.Cube, root.transform, new Vector3(0, .09f, 0), new Vector3(bw, .18f, bh), wall);
                 if (b.type == "food_farm")
                 {
                     for (int row = 0; row < 4; row++) Shape(PrimitiveType.Cube, root.transform,
-                        new Vector3(0, .24f, (row - 1.5f) * bh / 4), new Vector3(bw * .86f, .3f, bh / 7), gold);
+                        new Vector3(0, .24f, (row - 1.5f) * bh / 4), new Vector3(bw * .86f, .3f, bh / 7), accent);
                 }
                 else
                 {

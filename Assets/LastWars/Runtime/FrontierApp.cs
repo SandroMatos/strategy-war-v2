@@ -310,6 +310,10 @@ namespace LastWars.Client
 
             bool first = state == null;
 
+            if (state != null &&
+                (result.buildings.Count(b => b.type.Contains("warehouse")) != state.buildings.Count(b => b.type.Contains("warehouse")) ||
+                 result.buildings.Any(b => b.type.Contains("warehouse") && !state.buildings.Any(old => old.id == b.id && old.level == b.level))))
+                production.Snapshot(null);
             if (state != null && result.buildings.Any(b => Contracts.Produces(b.type) &&
                 !state.buildings.Any(old => old.id == b.id && old.level == b.level && old.status == b.status)))
                 production.Snapshot(null);
@@ -497,6 +501,7 @@ namespace LastWars.Client
             string failure = null;
             yield return api.Get<ProductionStorageDto>(PlayerPath + "/resources/production", dto => result = dto, error => failure = error);
             production.Snapshot(failure == null ? result : null);
+            ui.StorageCapacity(failure == null && result != null ? result.global_capacity_per_resource : 0);
             if (!production.HasSnapshot) ui.Status("Produção indisponível. Atualize para tentar novamente.", true);
         }
 

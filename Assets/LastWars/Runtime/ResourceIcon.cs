@@ -8,9 +8,19 @@ namespace LastWars.Client
     public sealed class ResourceIcon : MaskableGraphic
     {
         public ResourceKind Kind;
+        public bool Builder;
         protected override void OnPopulateMesh(VertexHelper mesh)
         {
             mesh.Clear();
+            if (Builder)
+            {
+                // Hard hat, drawn with the same vector UI technique as the resource icons.
+                Circle(mesh, new Vector2(.5f,.48f), .32f, new Color(1,.68f,.12f));
+                Poly(mesh,new Color(.13f,.2f,.29f),new Vector2(.12f,.05f),new Vector2(.88f,.05f),new Vector2(.88f,.32f),new Vector2(.12f,.32f));
+                Poly(mesh,new Color(1,.83f,.25f),new Vector2(.1f,.3f),new Vector2(.9f,.3f),new Vector2(.9f,.42f),new Vector2(.1f,.42f));
+                Poly(mesh,new Color(1,.91f,.5f),new Vector2(.44f,.4f),new Vector2(.56f,.4f),new Vector2(.56f,.84f),new Vector2(.44f,.84f));
+                return;
+            }
             switch (Kind)
             {
                 case ResourceKind.Food:
