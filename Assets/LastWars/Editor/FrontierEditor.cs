@@ -34,6 +34,8 @@ namespace LastWars.Client.Editor
         [MenuItem("LastWars/Validar contratos do frontend")]
         public static void ValidateContracts()
         {
+            var production = JsonUtility.FromJson<ProductionDto>("{\"collection_target\":105,\"production_per_hour\":{\"food\":3482},\"stored_resources\":{\"food\":50},\"local_capacity\":1000}");
+            Require(production.collection_target == 105 && production.production_per_hour.food == 3482, "Contrato de produção variável inválido");
             GridPlacementRulesTests.Run();
             ProductionRulesTests.Run();
             const string id = "4c523111-602f-456c-8000-a234bd842baa";

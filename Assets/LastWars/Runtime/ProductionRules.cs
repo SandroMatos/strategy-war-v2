@@ -7,7 +7,7 @@ namespace LastWars.Client
     {
         public string building_id, building_type;
         public ResourcesDto production_per_hour, stored_resources;
-        public long local_capacity;
+        public long local_capacity, collection_target;
     }
     [Serializable] public sealed class ProductionStorageDto
     {
@@ -23,6 +23,7 @@ namespace LastWars.Client
     }
     public static class ProductionRules
     {
+        public const long CollectionTarget = 100;
         public static ResourceKind Kind(string type)
         {
             switch (type)
@@ -42,6 +43,7 @@ namespace LastWars.Client
         {
             switch (kind) { case ResourceKind.Iron: return "Ferro"; case ResourceKind.Gold: return "Ouro"; case ResourceKind.Oil: return "Petróleo"; default: return "Comida"; }
         }
+        // The server provides the per-type batch target; 100 supports older API snapshots.
         // The production endpoint accrues whole units and resets its timestamp on each GET.
         // Start the monotonic estimate at response receipt (conservative for network latency).
         public static ProductionState Evaluate(ProductionDto value, double elapsed)
@@ -49,15 +51,17 @@ namespace LastWars.Client
             if (value == null || value.stored_resources == null || value.production_per_hour == null || value.local_capacity <= 0)
                 return default;
             var kind = Kind(value.building_type);
-            if (Amount(value.stored_resources, kind) > 0) return new ProductionState { Ready = true, Active = true, Progress = 1 };
+            long target = value.collection_target > 0 ? value.collection_target : CollectionTarget;
+            long stored = Math.Max(0, Amount(value.stored_resources, kind));
+            if (stored >= target) return new ProductionState { Ready = true, Active = true, Progress = 1 };
             long rate = Amount(value.production_per_hour, kind);
-            if (rate <= 0) return default;
-            double duration = 3600.0 / rate;
+            if (rate <= 0 || value.local_capacity < target) return default;
+            double duration = (target - stored) * 3600.0 / rate;
             elapsed = Math.Max(0, elapsed);
             double remaining = Math.Max(0, duration - elapsed);
             return new ProductionState { Active = true, Ready = remaining == 0,
                 Seconds = (int)Math.Min(int.MaxValue, Math.Ceiling(remaining)),
-                Progress = (float)Math.Min(1, elapsed / duration) };
+                Progress = (float)Math.Min(1, (stored + elapsed * rate / 3600.0) / target) };
         }
         public static string UpgradeBlocker(BaseDto state, UpgradeDto quote, bool fresh)
         {

@@ -520,7 +520,26 @@ namespace LastWars.Client
         IEnumerator Mutate(string buildingId, string action)
         {
             string failure = null;
-            yield return api.Send("POST", PlayerPath + "/buildings/" + buildingId + "/" + action, null, _ => { }, error => failure = error);
+            CollectResourcesDto collection = null;
+            var model = world.BuildingModel(buildingId);
+            Vector3 feedbackPosition = model != null ? model.transform.position : Vector3.zero;
+            if (model != null)
+                foreach (var renderer in model.GetComponentsInChildren<Renderer>())
+                    feedbackPosition.y = Mathf.Max(feedbackPosition.y, renderer.bounds.max.y);
+            feedbackPosition += Vector3.up * .25f;
+            yield return api.Send("POST", PlayerPath + "/buildings/" + buildingId + "/" + action, null, json =>
+            {
+                if (action != "collect") return;
+                try
+                {
+                    collection = JsonUtility.FromJson<CollectResourcesDto>(json);
+                    if (collection == null || collection.building_id != buildingId || collection.collected_resources == null)
+                    { collection = null; failure = "Resposta de coleta inválida. Confira o saldo atualizado."; }
+                }
+                catch (Exception) { collection = null; failure = "Resposta de coleta inválida. Confira o saldo atualizado."; }
+            }, error => failure = error);
+            if (failure == null && collection != null && model != null)
+                CollectionFeedback.Play(collection.collected_resources, feedbackPosition, transform);
             ui.Close();
             // Production GET resets fractional accumulation on the server: fetch at login and
             // after mutations only, never on every base poll. Reconcile failures too.

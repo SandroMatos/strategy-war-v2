@@ -38,6 +38,17 @@ namespace LastWars.Client
                     break;
             }
         }
+        public Mesh CreateMesh()
+        {
+            using (var vertices = new VertexHelper())
+            {
+                OnPopulateMesh(vertices);
+                var mesh = new Mesh { name = Kind + " icon geometry" };
+                vertices.FillMesh(mesh);
+                return mesh;
+            }
+        }
+
         void Circle(VertexHelper m, Vector2 center, float radius, Color c)
         {
             var points = new Vector2[24];

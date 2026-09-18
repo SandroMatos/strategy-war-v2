@@ -44,13 +44,16 @@ namespace LastWars.Client
                 var label=FrontierView.Text(root,"Sincronizando",14,24);
                 label.alignment=TextAlignmentOptions.Center;
                 label.rectTransform.anchorMin=label.rectTransform.anchorMax=new Vector2(.5f,.5f);
-                label.rectTransform.anchoredPosition=new Vector2(0,6); label.rectTransform.sizeDelta=new Vector2(80,20);
-                var track=Rect("Track",root,new Vector2(72,7)); track.anchoredPosition=new Vector2(0,-9);
+                label.rectTransform.anchoredPosition=Vector2.zero; label.rectTransform.sizeDelta=new Vector2(80,20);
+                var track=Rect("Track",root,Vector2.zero);
+                track.anchorMin=Vector2.zero; track.anchorMax=Vector2.one; track.offsetMin=track.offsetMax=Vector2.zero;
                 track.gameObject.AddComponent<Image>().color=new Color(.2f,.25f,.3f); track.GetComponent<Image>().raycastTarget=false;
                 var fill=Rect("Fill",track,Vector2.zero); fill.anchorMin=Vector2.zero; fill.anchorMax=Vector2.one; fill.offsetMin=fill.offsetMax=Vector2.zero;
-                fill.gameObject.AddComponent<Image>().color=new Color(.31f,.82f,.4f); fill.GetComponent<Image>().raycastTarget=false;
+                fill.gameObject.AddComponent<Image>().color=new Color(.13f,.53f,.27f); fill.GetComponent<Image>().raycastTarget=false;
                 var icon=ResourceIcon.Create(root,ProductionRules.Kind(b.type),new Vector2(30,30));
                 icon.rectTransform.anchoredPosition=new Vector2(-24,0);
+                label.fontStyle=FontStyles.Bold;
+                label.transform.SetAsLastSibling();
                 float height=0;
                 var model=world.BuildingModel(b.id);
                 if(model!=null) foreach(var renderer in model.GetComponentsInChildren<Renderer>())
@@ -77,7 +80,7 @@ namespace LastWars.Client
                 badge.Icon.gameObject.SetActive(state.Ready);
                 badge.Fill.parent.gameObject.SetActive(!state.Ready && state.Active);
                 badge.Fill.anchorMax=new Vector2(state.Progress,1);
-                badge.Label.rectTransform.anchoredPosition=state.Ready?new Vector2(17,0):new Vector2(0,6);
+                badge.Label.rectTransform.anchoredPosition=state.Ready?new Vector2(17,0):Vector2.zero;
                 badge.Label.rectTransform.sizeDelta=state.Ready?new Vector2(49,28):new Vector2(80,20);
                 badge.Label.text=state.Ready?"Coletar":!HasSnapshot?"Sem conexão":!state.Active?"Sem produção":state.Seconds+" s";
             }
