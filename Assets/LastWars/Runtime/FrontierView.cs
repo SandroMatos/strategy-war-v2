@@ -17,7 +17,8 @@ namespace LastWars.Client
         GameObject shade, hud, placementPanel;
         TMP_Text placementStatus;
         Button placementConfirm;
-        TMP_Text status, resources, commander;
+        TMP_Text status, commander;
+        readonly TMP_Text[] resourceAmounts = new TMP_Text[4];
         CanvasGroup dialogGroup, hudGroup;
         Rect lastSafe;
         Vector2 lastScreen;
@@ -35,9 +36,27 @@ namespace LastWars.Client
                 new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             hud = new GameObject("HUD", typeof(RectTransform)); hud.transform.SetParent(safe, false); Stretch((RectTransform)hud.transform);
             hudGroup = hud.AddComponent<CanvasGroup>();
-            var top = Panel("Command strip", hud.transform, Navy); Top(top, 92);
+            var top = Panel("Command strip", hud.transform, Navy); Top(top, 108);
             commander = Text(top, "IRON FRONTIER  /  COMANDO", 20, 30); Position(commander.rectTransform, new Vector2(16, -8), new Vector2(-16, -42), true);
-            resources = Text(top, "Conectando à base...", 18, 40); Position(resources.rectTransform, new Vector2(16, -44), new Vector2(-16, -88), true);
+            var resourceRow = Rect("Resources", top);
+            Position(resourceRow, new Vector2(12, -100), new Vector2(-12, -44), true);
+            var resourceLayout = resourceRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            resourceLayout.spacing = 8; resourceLayout.childForceExpandWidth = true; resourceLayout.childForceExpandHeight = true;
+            for (int i = 0; i < resourceAmounts.Length; i++)
+            {
+                var kind = (ResourceKind)i;
+                var card = Panel(ProductionRules.Name(kind), resourceRow, Slate);
+                card.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+                var icon = ResourceIcon.Create(card, kind, new Vector2(42, 42));
+                icon.rectTransform.anchorMin = icon.rectTransform.anchorMax = new Vector2(0, .5f);
+                icon.rectTransform.anchoredPosition = new Vector2(27, 0);
+                var amount = Text(card, "0", 20, 26);
+                Position(amount.rectTransform, new Vector2(53, -51), new Vector2(-5, -22), true);
+                amount.enableAutoSizing = true; amount.fontSizeMin = 10; amount.fontSizeMax = 20;
+                amount.enableWordWrapping = false; resourceAmounts[i] = amount;
+                var name = Text(card, ProductionRules.Name(kind), 12, 20);
+                Position(name.rectTransform, new Vector2(53, -23), new Vector2(-5, -3), true);
+            }
             var bottom = Panel("Navigation", hud.transform, Navy); Bottom(bottom, 108);
             var row = Rect("Actions", bottom); row.anchorMin = new Vector2(0, 1); row.anchorMax = Vector2.one;
             row.pivot = new Vector2(.5f, 1); row.offsetMin = new Vector2(12, -53); row.offsetMax = new Vector2(-12, -8);
@@ -99,8 +118,8 @@ namespace LastWars.Client
         {
             hud.SetActive(true);
             commander.text = $"{name}   •   Construtores {data.available_builders}/{data.total_builders}";
-            resources.text = data.resources.Summary().Replace('\n', ' ');
-            resources.enableAutoSizing = true; resources.fontSizeMin = 12; resources.fontSizeMax = 18;
+            for (int i = 0; i < resourceAmounts.Length; i++)
+                resourceAmounts[i].text = ProductionRules.Amount(data.resources, (ResourceKind)i).ToString("N0");
         }
         public void Close() { if (shade != null) Destroy(shade); shade = null; dialog = null; dialogGroup = null; }
         public RectTransform Dialog(string title, bool close = true)

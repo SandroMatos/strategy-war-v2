@@ -13,6 +13,7 @@ namespace LastWars.Client
         ApiClient api;
         FrontierView ui;
         BaseWorld world;
+        BuildingProductionView production;
         GridPlacementController placement;
         ObstacleDto[] placementObstacles;
         SessionDto session;
@@ -48,6 +49,8 @@ namespace LastWars.Client
 
             ui = uiObject.AddComponent<FrontierView>();
             ui.Initialize();
+            production = uiObject.AddComponent<BuildingProductionView>();
+            production.Initialize(world);
             placement = gameObject.AddComponent<GridPlacementController>();
             placement.Changed = ui.PlacementStatus;
             placement.Cancelled = () => { ui.HidePlacement(); ui.Status("Movimentação cancelada. Posição original preservada."); };
@@ -307,6 +310,9 @@ namespace LastWars.Client
 
             bool first = state == null;
 
+            if (state != null && result.buildings.Any(b => Contracts.Produces(b.type) &&
+                !state.buildings.Any(old => old.id == b.id && old.level == b.level && old.status == b.status)))
+                production.Snapshot(null);
             state = result;
             lastRefreshSucceeded = true;
 
@@ -325,9 +331,11 @@ namespace LastWars.Client
                 selected,
                 first
             );
+            production.Render(state);
+            if (!production.HasSnapshot) yield return RefreshProduction();
 
             ui.Status(
-                "Base sincronizada • Selecione uma construção para ver os detalhes."
+                production.HasSnapshot ? "Clique na construção pronta para coletar • EDIFÍCIOS abre os detalhes." : "Produção indisponível. Atualize para tentar novamente.", !production.HasSnapshot
             );
 
             yield return api.Send(
@@ -366,6 +374,7 @@ namespace LastWars.Client
 
         void Update()
         {
+            if (production != null) production.Hidden = ui.HasDialog || (placement != null && placement.IsActive);
             if (world != null) world.InputBlocked = busy || ui.HasDialog || (placement != null && placement.IsActive);
             if (state != null && !busy && !ui.HasDialog && !placement.IsActive && Time.unscaledTime >= nextRefresh) Run(Refresh());
         }
@@ -377,11 +386,18 @@ namespace LastWars.Client
             foreach (var b in state.buildings)
             {
                 var id = b.id;
-                FrontierView.Button(panel, Contracts.Name(b.type) + " • Nv. " + b.level + " • " + Contracts.State(b.status), () => Select(id));
+                FrontierView.Button(panel, Contracts.Name(b.type) + " • Nv. " + b.level + " • " + Contracts.State(b.status), () => OpenDetails(id));
             }
         }
 
         void Select(string id)
+        {
+            if (busy || state == null || placement.IsActive) return;
+            if (production.Ready(id)) { ui.Close(); Act(id, "collect"); return; }
+            OpenDetails(id);
+        }
+
+        void OpenDetails(string id)
         {
             if (busy || state == null || placement.IsActive) return;
             selected = id; world.Select(id);
@@ -391,6 +407,13 @@ namespace LastWars.Client
 
         IEnumerator Details(BuildingDto b)
         {
+            // Recheck wallet/builders before showing actionable costs (no speculative debit).
+            var loading = ui.Dialog(Contracts.Name(b.type)); ui.Busy(true);
+            FrontierView.Text(loading, "Verificando recursos e construtores...");
+            yield return Refresh();
+            if (!ui.HasDialog) yield break;
+            b = state.buildings.FirstOrDefault(item => item.id == b.id);
+            if (b == null) { ui.Close(); yield break; }
             var panel = ui.Dialog(Contracts.Name(b.type)); ui.Busy(true);
             FrontierView.Text(panel, "NÍVEL " + b.level + "  /  " + Contracts.State(b.status), 20, 36);
             FrontierView.Button(panel, "MOVER NA GRADE", () => BeginPlacement(b.id));
@@ -407,11 +430,12 @@ namespace LastWars.Client
             if (b.status == "ready_to_upgrade")
             { FrontierView.Button(panel, "CONCLUIR OBRA", () => Act(b.id, "confirm")); yield break; }
             if (Contracts.Produces(b.type) && b.status == "completed")
-                FrontierView.Button(panel, "COLETAR RECURSOS", () => Act(b.id, "collect"));
+                FrontierView.Button(panel, "COLETAR RECURSOS", () => Act(b.id, "collect")).interactable = production.Ready(b.id);
             if (b.status != "completed" && b.status != "pending")
             { FrontierView.Text(panel, "Ações de reparo serão integradas em uma próxima etapa.", 18, 65); yield break; }
             UpgradeDto quote = null; string failure = null;
             yield return api.Get<UpgradeDto>(PlayerPath + "/buildings/" + b.id + "/next-upgrade", dto => quote = dto, error => failure = error);
+            if (panel == null || !ui.HasDialog) yield break;
             if (failure != null) { FrontierView.Text(panel, failure, 17, 110); yield break; }
             if (quote == null || quote.building_id != b.id || quote.required_resources == null)
             { FrontierView.Text(panel, "Resposta de evolução inválida."); yield break; }
@@ -429,9 +453,9 @@ namespace LastWars.Client
             if (summary.Length > 0) FrontierView.Text(panel, summary.ToString(), 16, Mathf.Max(38, summary.ToString().Count(c => c == '\n') * 25));
             if (quote.unlocked_features?.unlocks != null && quote.unlocked_features.unlocks.Length > 0)
                 FrontierView.Text(panel, "Desbloqueia: " + string.Join(", ", quote.unlocked_features.unlocks), 16, 75);
-            bool affordable = state.resources.Covers(quote.required_resources) && state.available_builders > 0;
-            FrontierView.Text(panel, affordable ? "O servidor verificará os demais requisitos ao iniciar a obra." : "Recursos ou construtores insuficientes.", 15, 50);
-            FrontierView.Button(panel, "INICIAR EVOLUÇÃO", () => Act(b.id, "upgrade")).interactable = affordable;
+            string blocker = ProductionRules.UpgradeBlocker(state, quote, lastRefreshSucceeded);
+            FrontierView.Text(panel, blocker ?? "Recursos e construtor disponíveis. O servidor validará os demais pré-requisitos.", 15, 50);
+            FrontierView.Button(panel, "INICIAR EVOLUÇÃO", () => Act(b.id, "upgrade")).interactable = blocker == null;
         }
 
 
@@ -467,6 +491,15 @@ namespace LastWars.Client
             ui.Status(failure ?? (lastRefreshSucceeded ? "Posição salva e confirmada pelo servidor." : "Movimentação enviada, mas a base não pôde ser atualizada. Use ATUALIZAR."), failure != null || !lastRefreshSucceeded);
         }
 
+        IEnumerator RefreshProduction()
+        {
+            ProductionStorageDto result = null;
+            string failure = null;
+            yield return api.Get<ProductionStorageDto>(PlayerPath + "/resources/production", dto => result = dto, error => failure = error);
+            production.Snapshot(failure == null ? result : null);
+            if (!production.HasSnapshot) ui.Status("Produção indisponível. Atualize para tentar novamente.", true);
+        }
+
         static string EffectName(string name)
         {
             switch (name)
@@ -489,6 +522,9 @@ namespace LastWars.Client
             string failure = null;
             yield return api.Send("POST", PlayerPath + "/buildings/" + buildingId + "/" + action, null, _ => { }, error => failure = error);
             ui.Close();
+            // Production GET resets fractional accumulation on the server: fetch at login and
+            // after mutations only, never on every base poll. Reconcile failures too.
+            production.Snapshot(null);
             // Reconcile even after a timeout: the server might have committed the action.
             yield return Refresh();
             ui.Status(failure ?? (lastRefreshSucceeded ? "Ação confirmada pelo servidor." : "Ação aceita, mas a atualização da base falhou. Use ATUALIZAR antes de repetir."), failure != null || !lastRefreshSucceeded);

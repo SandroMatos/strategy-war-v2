@@ -35,6 +35,7 @@ namespace LastWars.Client.Editor
         public static void ValidateContracts()
         {
             GridPlacementRulesTests.Run();
+            ProductionRulesTests.Run();
             const string id = "4c523111-602f-456c-8000-a234bd842baa";
             var data = JsonUtility.FromJson<BaseDto>("{\"player_id\":\"" + id + "\",\"resources\":{\"food\":13,\"iron\":2147483648,\"oil\":7,\"gold\":0},\"buildings\":[{\"id\":\"" + id + "\",\"type\":\"iron_mine\",\"width\":2,\"height\":2,\"construction_finish_time\":null}],\"grid_bounds\":{\"min_x\":6,\"max_x\":16,\"min_y\":6,\"max_y\":16}}");
             Require(Contracts.ValidBase(data, id), "Base válida rejeitada");

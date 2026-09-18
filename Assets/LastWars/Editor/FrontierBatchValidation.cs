@@ -53,7 +53,7 @@ namespace LastWars.Client.Editor
             if (!EditorApplication.isPlaying) return;
             output = SessionState.GetString("FrontierProbe.Output", "Library/FrontierProbe");
             if (started == 0) { started = EditorApplication.timeSinceStartup; next = started + 3; }
-            if (EditorApplication.timeSinceStartup - started > 100) { Finish(false, "Timeout waiting for frontend/API."); return; }
+            if (EditorApplication.timeSinceStartup - started > 180) { Finish(false, "Timeout waiting for frontend/API."); return; }
             if (EditorApplication.timeSinceStartup < next) return;
             try
             {
@@ -83,9 +83,33 @@ namespace LastWars.Client.Editor
                 }
                 if (phase == 30)
                 {
+                    var production = Field(app, "production") as BuildingProductionView;
+                    var mine = state.buildings.First(b => b.type == "iron_mine");
+                    if (!production.HasSnapshot) { Finish(false, "Missing production snapshot."); return; }
+                    if (!production.Ready(mine.id)) return;
+                    SessionState.SetString("FrontierProbe.BeforeIron", state.resources.iron.ToString());
+                    ScreenCapture.CaptureScreenshot(Path.Combine(output, "production-ready.png"));
+                    next = EditorApplication.timeSinceStartup + 2; phase = 31; return;
+                }
+                if (phase == 31)
+                {
+                    var mine = state.buildings.First(b => b.type == "iron_mine");
+                    Invoke(app, "Select", mine.id);
+                    if ((Field(app, "ui") as FrontierView).HasDialog) { Finish(false, "Collection opened a dialog."); return; }
+                    next = EditorApplication.timeSinceStartup + 2; phase = 32; return;
+                }
+                if (phase == 32)
+                {
+                    if (state.resources.iron <= long.Parse(SessionState.GetString("FrontierProbe.BeforeIron", "0")))
+                    { Finish(false, "Collection did not credit the server wallet."); return; }
+                    ScreenCapture.CaptureScreenshot(Path.Combine(output, "production-countdown.png"));
+                    next = EditorApplication.timeSinceStartup + 2; phase = 33; return;
+                }
+                if (phase == 33)
+                {
                     var building = state.buildings.FirstOrDefault(b => b.type == "iron_mine") ?? state.buildings.First();
                     SessionState.SetString("FrontierProbe.Building", building.id);
-                    Invoke(app, "Select", building.id); next = EditorApplication.timeSinceStartup + 2; phase = 4; return;
+                    Invoke(app, "OpenDetails", building.id); next = EditorApplication.timeSinceStartup + 2; phase = 4; return;
                 }
                 if (phase == 4)
                 {
@@ -93,6 +117,8 @@ namespace LastWars.Client.Editor
                     var allText = string.Join("\n", UnityEngine.Object.FindObjectsOfType<TMPro.TMP_Text>().Select(t => t.text));
                     File.WriteAllText(Path.Combine(output, "visible-ui.txt"), allText);
                     if (!allText.Contains("PRÓXIMO NÍVEL")) { Finish(false, "Upgrade contract not displayed."); return; }
+                    var upgrade = UnityEngine.Object.FindObjectsOfType<UnityEngine.UI.Button>().FirstOrDefault(b => b.name == "INICIAR EVOLUÇÃO");
+                    if (upgrade == null || !upgrade.interactable) { Finish(false, "Affordable upgrade button disabled."); return; }
                     next = EditorApplication.timeSinceStartup + 2; phase++; return;
                 }
                 if (phase == 5)
@@ -161,7 +187,21 @@ namespace LastWars.Client.Editor
                     ScreenCapture.CaptureScreenshot(Path.Combine(output, "placement-saved.png"));
                     next = EditorApplication.timeSinceStartup + 2; phase = 12; return;
                 }
-                if (phase == 12) Finish(!runtimeError, "Unity Play Mode: session, base, upgrade, grid preview, collision, cancellation and PATCH placement/reconciliation passed. QA account only; prior local session restored.");
+                if (phase == 12)
+                {
+                    Invoke(app, "OpenDetails", state.buildings.First(b => b.type == "food_farm" && b.status == "completed").id);
+                    next = EditorApplication.timeSinceStartup + 2; phase = 13; return;
+                }
+                if (phase == 13)
+                {
+                    var button = UnityEngine.Object.FindObjectsOfType<UnityEngine.UI.Button>().FirstOrDefault(b => b.name == "INICIAR EVOLUÇÃO");
+                    if (button == null || button.interactable) { Finish(false, "Unavailable builder did not disable upgrade."); return; }
+                    var icons = UnityEngine.Object.FindObjectsOfType<ResourceIcon>();
+                    if (icons.Length < 4 || icons.Any(i => i.GetComponent<CanvasRenderer>() == null)) { Finish(false, "Resource icon renderer missing."); return; }
+                    ScreenCapture.CaptureScreenshot(Path.Combine(output, "upgrade-disabled.png"));
+                    next = EditorApplication.timeSinceStartup + 2; phase = 14; return;
+                }
+                if (phase == 14) Finish(!runtimeError, "Unity Play Mode: production countdown/icons, direct collection without dialog, server wallet credit, enabled/disabled upgrade buttons, icon renderers, upgrade and grid placement passed. QA account only; prior local session restored.");
             }
             catch (Exception error) { Finish(false, error.GetBaseException().Message); }
         }
